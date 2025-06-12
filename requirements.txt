@@ -1,0 +1,71 @@
+# --- SOLANA & BLOCKCHAIN ---
+aiohappyeyeballs==2.6.1
+aiohttp==3.12.9
+aiosignal==1.3.2
+anyio==4.9.0
+async-timeout==5.0.1
+attrs==25.3.0
+base58==2.1.1
+borsh-construct==0.1.0
+certifi==2025.4.26
+construct-typing==0.5.6
+construct==2.10.68
+exceptiongroup==1.3.0
+frozenlist==1.6.2
+grpcio-tools==1.72.1
+grpcio==1.72.1
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.27.2      # Pinned due to proxy issue with solana-py
+idna==3.10
+jsonalias==0.1.1
+multidict==6.4.4
+propcache==0.3.1
+protobuf==6.31.1
+python-dotenv==1.1.0
+pyyaml==6.0.2
+setuptools==80.9.0
+sniffio==1.3.1
+solana==0.36.6
+solders==0.26.0
+sumtypes==0.1a6
+typing-extensions==4.14.0
+websockets==15.0
+yarl==1.20.0
+
+# --- TELEGRAM BOT ---
+python-telegram-bot==21.2
+
+# --- DATA SCIENCE & ML ---
+scikit-learn==1.4.2
+joblib==1.3.2
+numpy==2.3.0
+pandas==2.3.0
+
+# --- EXCEL, CSV, SCRAPING ---
+beautifulsoup4==4.12.3    # Only needed for web scraping (can remove if not needed)
+openpyxl                  # Only needed for Excel file handling (can remove if not needed)
+
+# --- WEB REQUESTS ---
+requests>=2.31.0
+requests-cache           # Optional, caches API calls to speed up dev/testing
+
+# --- VISUALIZATION ---
+matplotlib               # For plotting graphs, EDA, trends
+seaborn                  # For prettier statistical plots (works with matplotlib)
+
+# --- UTILITIES ---
+tqdm                     # For progress bars in loops
+loguru                   # For easy logging (optional but user-friendly)
+
+# --- DATABASE ---
+SQLAlchemy               # Powerful database toolkit (use with SQLite or others)
+
+# --- TESTING ---
+pytest>=7.4
+pytest-asyncio>=0.23
+
+# --- NOTES ---
+# sqlite3 is built into Python—no need to install.
+# If you ever need to remove openpyxl or beautifulsoup4, feel free if they're unused.
+# npm i pumpdotfun-sdk and npm i pumpswap should be in package.json, not here.
