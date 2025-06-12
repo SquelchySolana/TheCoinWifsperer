@@ -17,17 +17,20 @@ except Exception:  # matplotlib fallback or missing
 # Load environment variables from .env file if present
 load_dotenv()
 
-API_VERSION = "v1"
-NETWORK = "solana"
-DEX_API_BASE = os.getenv("DEX_API_BASE", "https://api.dexscreener.com")
+# Moralis Solana base URL and API key
+MORALIS_SOLANA_API_BASE = os.getenv(
+    "MORALIS_SOLANA_API_BASE", "https://solana-gateway.moralis.io"
+)
+MORALIS_API_KEY = os.getenv("MORALIS_API_KEY")
 
 # Parse command line arguments
 if len(sys.argv) > 1:
-    TOKEN_ADDRESS = sys.argv[1]
+    PAIR_ADDRESS = sys.argv[1]
 else:
-    TOKEN_ADDRESS = "F4dqMnX665khxfGJ26PaAKrFoUCmqCmMPoos2ai7pump"  # Default token for testing
+    PAIR_ADDRESS = "F4dqMnX665khxfGJ26PaAKrFoUCmqCmMPoos2ai7pump"  # Default for testing
 
-INTERVAL = sys.argv[2] if len(sys.argv) > 2 else "1h"
+NETWORK = sys.argv[2] if len(sys.argv) > 2 else "mainnet"
+INTERVAL = sys.argv[3] if len(sys.argv) > 3 else "1h"
 
 # Set up logging
 LOG_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "logs")
@@ -41,24 +44,27 @@ logging.basicConfig(
 )
 
 
-def fetch_ohlcv(address: str, interval: str) -> pd.DataFrame:
-    """Fetch OHLCV candle data for a given token.
+def fetch_ohlcv(address: str, interval: str, network: str) -> pd.DataFrame:
+    """Fetch OHLCV candle data for a given pair from Moralis.
 
     Parameters
     ----------
     address : str
-        The token address on Solana.
+        The pair address on Solana.
     interval : str
         Candle interval such as '1m', '5m', '1h'.
+    network : str
+        Solana network, e.g. ``mainnet`` or ``devnet``.
 
     Returns
     -------
     pd.DataFrame
         DataFrame containing the candles or empty DataFrame on error.
     """
-    url = f"{DEX_API_BASE}/candles/{API_VERSION}/{NETWORK}/{address}?interval={interval}"
+    url = f"{MORALIS_SOLANA_API_BASE}/token/{network}/pairs/{address}/ohlcv?tf={interval}"
+    headers = {"X-API-Key": MORALIS_API_KEY} if MORALIS_API_KEY else {}
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
         if not isinstance(data, list):
@@ -101,18 +107,20 @@ def plot_candles(df: pd.DataFrame, interval: str) -> None:
         'v': 'Volume',
     }
     df_plot.rename(columns=rename_map, inplace=True)
-    mpf.plot(df_plot, type='candle', volume=True, title=f"{TOKEN_ADDRESS} {interval} OHLCV")
+    mpf.plot(df_plot, type='candle', volume=True, title=f"{PAIR_ADDRESS} {interval} OHLCV")
 
 
 def main() -> None:
     """Main execution to fetch data and optionally plot."""
-    logging.info("Fetching OHLCV for %s (interval %s)", TOKEN_ADDRESS, INTERVAL)
-    df = fetch_ohlcv(TOKEN_ADDRESS, INTERVAL)
+    logging.info(
+        "Fetching OHLCV for %s on %s (interval %s)", PAIR_ADDRESS, NETWORK, INTERVAL
+    )
+    df = fetch_ohlcv(PAIR_ADDRESS, INTERVAL, NETWORK)
     if df.empty:
         print("No OHLCV data returned. Check logs for details.")
         return
 
-    path = save_to_csv(df, TOKEN_ADDRESS)
+    path = save_to_csv(df, PAIR_ADDRESS)
     if path:
         logging.info("Saved OHLCV data to %s", path)
     else:
