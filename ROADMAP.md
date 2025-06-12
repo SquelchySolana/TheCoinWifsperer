@@ -9,7 +9,7 @@
 **1.2.** Create a project folder structure:
 
 ```
-/DEX Bot
+/TheCoinWifsperer
     /data
     /scripts
     /models
@@ -18,7 +18,7 @@
     config.env (store API keys, secrets here—never upload to GitHub)
 ```
 
-**1.3.** Load and test all API keys (Dexscreener, Moralis, Pump.fun SDK) to confirm connectivity.
+**1.3.** Load and test all API keys (Dexscreener, Moralis) to confirm connectivity.
 
 ---
 
@@ -168,18 +168,3 @@ For each task, Codex should:
 * Print a message when starting and finishing.
 * Log all errors and warnings.
 * Ask for confirmation before moving to real-money trading.
-
----
-
-**Ready to proceed?**
-
-* If yes:
-  **Which part would you like a starter script for?**
-  a) Data fetching
-  b) Feature engineering
-  c) Paper trading
-  d) Simple ML model
-  e) Real trading (Solana SDK)
-
-Or want me to just start from the top (data fetching) and build step-by-step with you?
-Your call!
