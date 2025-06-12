@@ -9,7 +9,7 @@
 **1.2.** Create a project folder structure:
 
 ```
-/DEX Bot
+/TheCoinWifsperer
     /data
     /scripts
     /models
@@ -18,7 +18,7 @@
     config.env (store API keys, secrets here—never upload to GitHub)
 ```
 
-**1.3.** Load and test all API keys (Dexscreener, Moralis, Pump.fun SDK) to confirm connectivity.
+**1.3.** Load and test all API keys (Dexscreener, Moralis) to confirm connectivity.
 
 ---
 
