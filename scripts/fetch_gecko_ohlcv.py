@@ -1,6 +1,8 @@
 import os
 import sys
 import logging
+import time
+import argparse
 from datetime import datetime, timezone
 from math import ceil
 from typing import List
@@ -34,24 +36,69 @@ AGG_OPTIONS = {
     "day": {1},
 }
 
+# ML output configuration
+DATA_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "data")
+TEMPLATE = os.path.join(os.path.dirname(__file__), os.pardir, "csv templates", "ohlcv_ml_template.xlsx")
+ML_CSV = os.path.join(DATA_DIR, "ohlcv_long.csv")
+ML_COLUMNS = [
+    "mint_address",
+    "pair_address",
+    "timeframe",
+    "datetime",
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+]
 
-def validate_inputs(args: List[str]) -> tuple[str, str, int]:
-    """Validate CLI args and return (token_address, timeframe, aggregate)."""
-    if not args:
-        logging.error("Token address is required")
-        raise SystemExit("Usage: fetch_gecko_ohlcv.py <TOKEN_ADDRESS> [timeframe] [aggregate]")
+# Rate limit configuration (GeckoTerminal allows 30 req/min)
+REQUEST_DELAY = 2.1
+REQUEST_BATCH = 30
+COOLDOWN = 60
+_request_count = 0
 
-    token_address = args[0]
-    timeframe = args[1] if len(args) > 1 else "minute"
-    if timeframe not in AGG_OPTIONS:
-        raise ValueError(f"Invalid timeframe '{timeframe}'. Use 'minute', 'hour', or 'day'.")
 
-    aggregate = int(args[2]) if len(args) > 2 else 1
-    if aggregate not in AGG_OPTIONS[timeframe]:
-        allowed = sorted(AGG_OPTIONS[timeframe])
-        raise ValueError(f"Invalid aggregate {aggregate} for timeframe {timeframe}. Allowed: {allowed}")
+def throttle() -> None:
+    """Respect GeckoTerminal rate limits."""
+    global _request_count
+    _request_count += 1
+    time.sleep(REQUEST_DELAY)
+    if _request_count >= REQUEST_BATCH:
+        logging.info("Request batch limit reached, cooling down %ds", COOLDOWN)
+        time.sleep(COOLDOWN)
+        _request_count = 0
 
-    return token_address, timeframe, aggregate
+
+def ensure_output_csv() -> None:
+    """Create the ML output CSV if it doesn't exist."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(ML_CSV):
+        try:
+            cols = list(pd.read_excel(TEMPLATE).columns)
+        except Exception:
+            cols = ML_COLUMNS
+        pd.DataFrame(columns=cols).to_csv(ML_CSV, index=False)
+
+
+def append_ml_rows(mint: str, pair: str, timeframe: str, candles: list) -> None:
+    """Append OHLCV candles to the ML CSV and deduplicate."""
+    if not candles:
+        return
+    df_existing = pd.read_csv(ML_CSV)
+    df_new = pd.DataFrame(
+        candles,
+        columns=["timestamp", "open", "high", "low", "close", "volume"],
+    )
+    df_new["datetime"] = pd.to_datetime(df_new["timestamp"], unit="s", utc=True).dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    df_new["mint_address"] = mint
+    df_new["pair_address"] = pair
+    df_new["timeframe"] = timeframe
+    df_new = df_new[ML_COLUMNS]
+    combined = pd.concat([df_existing, df_new], ignore_index=True)
+    combined.drop_duplicates(subset=["mint_address", "pair_address", "timeframe", "timestamp"], inplace=True)
+    combined.to_csv(ML_CSV, index=False)
 
 
 def fetch_pools(token: str) -> list:
@@ -61,6 +108,7 @@ def fetch_pools(token: str) -> list:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json().get("data", [])
+        throttle()
         return data
     except Exception as exc:
         logging.error("Error fetching pools: %s", exc)
@@ -116,15 +164,23 @@ def build_ohlcv_url(pair: str, timeframe: str, aggregate: int, before_ts: int, l
 
 def fetch_ohlcv(pair: str, timeframe: str, aggregate: int, before_ts: int, limit: int) -> list:
     """Fetch OHLCV data from GeckoTerminal."""
+    global _request_count
     url = build_ohlcv_url(pair, timeframe, aggregate, before_ts, limit)
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        items = resp.json().get("data", {}).get("attributes", {}).get("ohlcv_list", [])
-        return items
-    except Exception as exc:
-        logging.error("Error fetching OHLCV: %s", exc)
-        return []
+    while True:
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 429:
+                logging.warning("429 rate limit from GeckoTerminal. Cooling down %ds", COOLDOWN)
+                time.sleep(COOLDOWN)
+                _request_count = 0
+                continue
+            resp.raise_for_status()
+            items = resp.json().get("data", {}).get("attributes", {}).get("ohlcv_list", [])
+            throttle()
+            return items
+        except Exception as exc:
+            logging.error("Error fetching OHLCV: %s", exc)
+            return []
 
 
 def save_csv(data: list, pair: str) -> str:
@@ -152,48 +208,52 @@ def plot_candles(csv_path: str) -> None:
 
 
 def main() -> None:
-    token, timeframe, aggregate = validate_inputs(sys.argv[1:])
+    parser = argparse.ArgumentParser(description="Fetch OHLCV data from GeckoTerminal")
+    parser.add_argument("tokens", nargs="+", help="Token mint addresses")
+    parser.add_argument("--timeframe", default="minute", choices=AGG_OPTIONS.keys())
+    parser.add_argument("--aggregate", type=int, default=1)
+    args = parser.parse_args()
 
-    pools = fetch_pools(token)
-    if not pools:
-        print("No pools found for token.")
-        return
+    if args.aggregate not in AGG_OPTIONS[args.timeframe]:
+        allowed = sorted(AGG_OPTIONS[args.timeframe])
+        parser.error(f"Invalid aggregate {args.aggregate} for timeframe {args.timeframe}. Allowed: {allowed}")
 
-    pool = select_best_pool(pools)
-    attrs = pool.get("attributes", {})
-    pair_address = attrs.get("address")
-    if not pair_address:
-        print("Pool address not found in data.")
-        return
+    ensure_output_csv()
 
-    created_str = attrs.get("pool_created_at")
-    created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00")) if created_str else datetime.now(timezone.utc)
-    now_dt = datetime.now(timezone.utc)
-    age = now_dt - created_dt
+    tf_short = {"minute": "m", "hour": "h", "day": "d"}[args.timeframe]
+    timeframe_label = f"{args.aggregate}{tf_short}"
 
-    sec_per_unit = {"minute": 60, "hour": 3600, "day": 86400}[timeframe] * aggregate
-    total_seconds = (now_dt - created_dt).total_seconds()
-    limit = min(1000, ceil(total_seconds / sec_per_unit))
-    before_ts = int(now_dt.timestamp())
+    for token in args.tokens:
+        logging.info("Fetching OHLCV for %s", token)
+        pools = fetch_pools(token)
+        if not pools:
+            logging.info("No pools found for %s", token)
+            continue
 
-    candles = fetch_ohlcv(pair_address, timeframe, aggregate, before_ts, limit)
-    if not candles:
-        print("No OHLCV data returned.")
-        return
+        pool = select_best_pool(pools)
+        attrs = pool.get("attributes", {})
+        pair_address = attrs.get("address")
+        if not pair_address:
+            logging.info("Pool address not found for %s", token)
+            continue
 
-    csv_path = save_csv(candles, pair_address)
-    if csv_path:
-        logging.info("Saved OHLCV to %s", csv_path)
+        created_str = attrs.get("pool_created_at")
+        created_dt = datetime.fromisoformat(created_str.replace("Z", "+00:00")) if created_str else datetime.now(timezone.utc)
+        now_dt = datetime.now(timezone.utc)
+        sec_per_unit = {"minute": 60, "hour": 3600, "day": 86400}[args.timeframe] * args.aggregate
+        total_seconds = (now_dt - created_dt).total_seconds()
+        limit = min(1000, ceil(total_seconds / sec_per_unit))
+        before_ts = int(now_dt.timestamp())
 
-    print(f"Pool address: {pair_address}")
-    print(f"Pool created at: {created_dt.isoformat()}")
-    print(f"Pool age: {age}")
-    df_sample = pd.DataFrame(candles[:5], columns=["timestamp", "open", "high", "low", "close", "volume"])
-    df_sample["datetime"] = pd.to_datetime(df_sample["timestamp"], unit="s", utc=True)
-    print("Sample OHLCV data:")
-    print(df_sample)
+        candles = fetch_ohlcv(pair_address, args.timeframe, args.aggregate, before_ts, limit)
+        if not candles:
+            logging.info("No OHLCV data for %s", pair_address)
+            continue
 
-    plot_candles(csv_path)
+        append_ml_rows(token, pair_address, timeframe_label, candles)
+        logging.info("Appended %d candles for %s", len(candles), pair_address)
+
+    logging.info("Done fetching OHLCV")
 
 
 if __name__ == "__main__":
