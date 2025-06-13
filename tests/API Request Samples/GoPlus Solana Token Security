@@ -1,0 +1,22 @@
+# https://api.gopluslabs.io/api/v1/solana/token_security
+# Docs: https://docs.gopluslabs.io/reference/solanatokensecurityusingget
+# pip install goplus
+
+from goplus.token import Token
+
+# Example Solana token mint address
+address = "EXAMPLE_MINT_ADDRESS"
+
+# Call the Solana-specific token security endpoint.
+# Note: As of now, the GoPlus SDK may or may not have a dedicated wrapper for this.
+# If not, you can use requests as shown below.
+
+import requests
+
+params = {"address": address}
+resp = requests.get("https://api.gopluslabs.io/api/v1/solana/token_security", params=params, timeout=10)
+print(resp.json())
+
+# If/when GoPlus SDK supports it directly:
+# solana_token = Token(access_token=None).solana_token_security(address=address)
+# print(solana_token)
