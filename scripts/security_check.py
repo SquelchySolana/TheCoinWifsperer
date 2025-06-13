@@ -29,11 +29,16 @@ import requests
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
-CSV_PATH = os.path.join(DATA_DIR, "token_master_template.csv")
+CSV_PATH = os.getenv(
+    "TOKEN_CSV_PATH", os.path.join(DATA_DIR, "token_master_template.csv")
+)
 LOG_FILE = os.path.join(LOG_DIR, "data_collection.log")
 
 # API endpoints
-GENERAL_URL = "https://api.gopluslabs.io/api/v1/token_security/101"
+# General endpoint expects the chain_id path parameter. The Solana specific
+# endpoint is used for detailed checks in phase 2.
+GENERAL_URL = "https://api.gopluslabs.io/api/v1/token_security"
+CHAIN_ID = "101"  # Solana
 SOLANA_URL = "https://api.gopluslabs.io/api/v1/solana/token_security"
 
 # API limits
@@ -136,7 +141,7 @@ MAJOR_RISKS_SOLANA = {
 def setup_logging() -> None:
     os.makedirs(LOG_DIR, exist_ok=True)
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[logging.FileHandler(LOG_FILE), logging.StreamHandler()],
     )
@@ -147,6 +152,8 @@ def ensure_csv() -> pd.DataFrame:
     if not os.path.exists(CSV_PATH):
         pd.DataFrame(columns=HEADERS).to_csv(CSV_PATH, index=False)
     df = pd.read_csv(CSV_PATH, dtype=str)
+    if "mint_address" in df.columns:
+        df["mint_address"] = df["mint_address"].astype(str).str.strip()
     missing_cols = [c for c in HEADERS if c not in df.columns]
     for col in missing_cols:
         df[col] = ""
@@ -196,30 +203,46 @@ def parse_top_holder_fields(info: Dict[str, Any]) -> Dict[str, Any]:
 def fetch_general(addresses: List[str]) -> Dict[str, Any]:
     params = {"contract_addresses": ",".join(addresses)}
     try:
-        resp = requests.get(GENERAL_URL, params=params, timeout=10)
+        url = f"{GENERAL_URL}/{CHAIN_ID}"
+        resp = requests.get(url, params=params, timeout=10)
         resp.raise_for_status()
+        logging.debug("General API raw response: %s", resp.text)
         data = resp.json().get("result", {})
+        if data is None:
+            data = {}
         return data
     except Exception as exc:
         logging.error("General API error for %s: %s", addresses, exc)
         return {}
 
 
-def update_from_general(df: pd.DataFrame, results: Dict[str, Any]) -> None:
+def update_from_general(
+    df: pd.DataFrame, batch_addresses: List[str], results: Dict[str, Any]
+) -> None:
     now = datetime.now(timezone.utc).isoformat()
-    for addr, info in results.items():
+    for addr in batch_addresses:
+        info = results.get(addr, {})
         row_mask = df["mint_address"].str.lower() == addr.lower()
         if not row_mask.any():
             continue
-        for key, value in info.items():
-            if key not in df.columns:
-                df[key] = ""
-            df.loc[row_mask, key] = value
-        holders = parse_top_holder_fields(info)
-        for key, value in holders.items():
-            if key not in df.columns:
-                df[key] = ""
-            df.loc[row_mask, key] = value
+        if info:
+            for key, value in info.items():
+                if key not in df.columns:
+                    df[key] = ""
+                if isinstance(value, (list, dict)):
+                    df.loc[row_mask, key] = json.dumps(value)
+                else:
+                    df.loc[row_mask, key] = value
+            holders = parse_top_holder_fields(info)
+            for key, value in holders.items():
+                if key not in df.columns:
+                    df[key] = ""
+                df.loc[row_mask, key] = value
+        else:
+            df.loc[row_mask, "security_status"] = "NO_DATA"
+            df.loc[row_mask, "health_summary"] = "No data from GoPlus"
+            df.loc[row_mask, "last_updated"] = now
+            continue
         # first_seen_on
         if df.loc[row_mask, "first_seen_on"].isna().any() or (df.loc[row_mask, "first_seen_on"] == "").any():
             df.loc[row_mask, "first_seen_on"] = now
@@ -243,7 +266,11 @@ def fetch_solana(address: str) -> Dict[str, Any]:
     try:
         resp = requests.get(SOLANA_URL, params=params, timeout=10)
         resp.raise_for_status()
-        return resp.json().get("result", {})
+        logging.debug("Solana API raw response for %s: %s", address, resp.text)
+        data = resp.json().get("result", {})
+        if data is None:
+            data = {}
+        return data
     except Exception as exc:
         logging.error("Solana API error for %s: %s", address, exc)
         return {}
@@ -254,24 +281,31 @@ def update_from_solana(df: pd.DataFrame, address: str, info: Dict[str, Any]) -> 
     row_mask = df["mint_address"].str.lower() == address.lower()
     if not row_mask.any():
         return
-    for key, value in info.items():
-        if key not in df.columns:
-            df[key] = ""
-        df.loc[row_mask, key] = value
-    df.loc[row_mask, "last_updated"] = now
-    status = df.loc[row_mask, "security_status"].iloc[0]
-    danger = status == "DANGER"
-    triggered = []
-    for risk in MAJOR_RISKS_SOLANA:
-        if str(info.get(risk, "0")) in {"1", "True", "true"}:
-            danger = True
-            triggered.append(risk)
-    df.loc[row_mask, "security_status"] = "DANGER" if danger else "SAFE"
-    if danger and triggered:
-        summary = f"Danger—{','.join(triggered)}"
+    if info:
+        for key, value in info.items():
+            if key not in df.columns:
+                df[key] = ""
+            if isinstance(value, (list, dict)):
+                df.loc[row_mask, key] = json.dumps(value)
+            else:
+                df.loc[row_mask, key] = value
+        status = df.loc[row_mask, "security_status"].iloc[0]
+        danger = status == "DANGER"
+        triggered = []
+        for risk in MAJOR_RISKS_SOLANA:
+            if str(info.get(risk, "0")) in {"1", "True", "true"}:
+                danger = True
+                triggered.append(risk)
+        df.loc[row_mask, "security_status"] = "DANGER" if danger else "SAFE"
+        if danger and triggered:
+            summary = f"Danger—{','.join(triggered)}"
+        else:
+            summary = "Safe"
+        df.loc[row_mask, "health_summary"] = summary
     else:
-        summary = "Safe"
-    df.loc[row_mask, "health_summary"] = summary
+        df.loc[row_mask, "security_status"] = "NO_DATA"
+        df.loc[row_mask, "health_summary"] = "No data from GoPlus"
+    df.loc[row_mask, "last_updated"] = now
 
 
 def main() -> None:
@@ -285,8 +319,7 @@ def main() -> None:
 
     for batch_addresses in batch(addresses, GENERAL_BATCH):
         results = fetch_general(batch_addresses)
-        if results:
-            update_from_general(df, results)
+        update_from_general(df, batch_addresses, results)
         sleep(GENERAL_RATE_DELAY)
 
     pending = df[df["security_status"] == "PENDING"]["mint_address"].tolist()
