@@ -1,0 +1,17 @@
+# pip install goplus
+from goplus.token import Token
+
+# Example Solana token mint address
+addresses = ["EXAMPLE_MINT_ADDRESS"]
+
+# chain_id for Solana is "101"
+data = Token(access_token=None).token_security(
+    chain_id="101", addresses=addresses
+)
+print(data)
+
+# With timeout (optional)
+data = Token(access_token=None).token_security(
+    chain_id="101", addresses=addresses, **{"_request_timeout": 10}
+)
+print(data)
