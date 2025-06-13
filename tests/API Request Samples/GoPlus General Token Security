@@ -1,4 +1,8 @@
+# Sample: GoPlus General Token Security API
+# Docs: https://docs.gopluslabs.io/reference/tokensecurityusingget_1
+# GET: https://api.gopluslabs.io/api/v1/token_security/{chain_id}
 # pip install goplus
+
 from goplus.token import Token
 
 # Example Solana token mint address
