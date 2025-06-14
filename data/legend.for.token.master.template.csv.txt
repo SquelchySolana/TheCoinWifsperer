@@ -1,0 +1,71 @@
+Column Name	Description
+timestamp	When this token was last scanned/updated (UTC ISO8601).
+first_seen_on	When this token first appeared in your DB.
+last_updated	When this token was last updated/scanned.
+source	How token was discovered (trending, manual, watchlist, etc.).
+mint_address	SPL token mint address.
+pair_address	Pool address (for DEX/charts).
+name	Token name.
+symbol	Token symbol.
+age	Time since pool creation (seconds/hours).
+holders	Current holder count.
+total_supply	Total supply of the token.
+decimals	Token decimals.
+price	Latest price (USD or SOL).
+volume_5m	Trading volume in last 5 minutes.
+volume_1h	Trading volume in last 1 hour.
+volume_6h	Trading volume in last 6 hours.
+volume_24h	Trading volume in last 24 hours.
+marketcap_5m	Market cap in last 5 min window.
+marketcap_1h	Market cap in last 1 hour window.
+marketcap_6h	Market cap in last 6 hour window.
+marketcap_24h	Market cap in last 24 hour window.
+price_delta_1m	Price % change over 1 minute.
+price_delta_5m	Price % change over 5 minutes.
+price_delta_15m	Price % change over 15 minutes.
+price_delta_1h	Price % change over 1 hour.
+volume_delta_1m	Volume % change over 1 minute.
+volume_delta_5m	Volume % change over 5 minutes.
+volume_delta_15m	Volume % change over 15 minutes.
+volume_delta_1h	Volume % change over 1 hour.
+liquidity	Total liquidity in pool.
+pooled_sol	Amount of SOL in pool.
+pooled_token	Amount of token in pool.
+buy_count	Number of buy trades in recent window.
+buy_volume	Total volume bought in recent window.
+sell_count	Number of sell trades in recent window.
+sell_volume	Total volume sold in recent window.
+is_honeypot	GoPlus: 1 if honeypot, else 0.
+is_blacklisted	GoPlus: 1 if blacklisted, else 0.
+is_proxy	GoPlus: 1 if proxy contract, else 0.
+can_take_back_ownership	GoPlus: 1 if owner can reclaim ownership.
+owner_change_balance	GoPlus: 1 if owner can change user balances.
+is_mintable	GoPlus: 1 if mintable, else 0.
+is_open_source	GoPlus: 1 if open source, 0 if not.
+is_spl2022	GoPlus: 1 if SPL-2022, else 0.
+mint_authority_exist	GoPlus: 1 if mint authority exists.
+freeze_authority_exist	GoPlus: 1 if freeze authority exists.
+max_tx_amount	Max allowed per transaction (if any).
+max_wallet_amount	Max allowed per wallet (if any).
+trading_paused	Trading paused? 1 if yes, 0 if no.
+anti_bot	Anti-bot enabled? 1 if yes, 0 if no.
+tax_fee	Transaction tax/fee (if any, %).
+lp_holders	GoPlus: List or summary of LP token holders.
+held_by_top_1	Percent of tokens held by top holder.
+held_by_top_5	Percent of tokens held by top 5 holders.
+held_by_top_10	Percent of tokens held by top 10 holders.
+top_holders_json	Raw JSON (as string) of top holders and amounts.
+is_trending	1 if trending on aggregator, else 0.
+trending_rank	Rank on trending list.
+featured_on_aggregator	1 if featured, else 0.
+featured_rank	Rank on featured list.
+bubblemap_report	Summary/report of BubbleMap results.
+block_number	Block number at scan time.
+slot	Solana slot number at scan time.
+sentiment_score	Real-time social/bullish-bearish score.
+mentions	Mentions on X/Twitter/Telegram/etc.
+time_since_first_liquidity	Seconds/hours since liquidity added.
+time_since_first_trade	Seconds/hours since first trade.
+security_status	Automated label: SAFE, WARNING, DANGER, etc.
+health_summary	Plain English summary of token risk.
+notes	Free text notes/comments.
