@@ -69,3 +69,6 @@ time_since_first_trade	Seconds/hours since first trade.
 security_status	Automated label: SAFE, WARNING, DANGER, etc.
 health_summary	Plain English summary of token risk.
 notes	Free text notes/comments.
+Dex_boost? Does the token have "dex boost"
+Dex_boost_amount how many "boosts" does it have?
+Dex_ads? - is it listed as an advertisment coin? 
