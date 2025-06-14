@@ -19,6 +19,8 @@ from solders.rpc.responses import GetAccountInfoResp
 from spl.token._layouts import MINT_LAYOUT
 
 http_logger = logging.getLogger("rpc_http")
+# Track if the first successful request has been logged
+_first_http_logged = False
 # Minimal helpers from Metaplex python-api
 METADATA_PROGRAM_ID = Pubkey.from_string("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s")
 
@@ -68,12 +70,21 @@ def _rpc_request_with_logging(client: Client, body: Body, parser: Type[Any]) -> 
     """Send RPC request, log status, and parse response."""
     kwargs = client._provider._before_request(body)  # type: ignore[attr-defined]
     resp = client._provider.session.post(**kwargs)  # type: ignore[attr-defined]
-    http_logger.info(
-        'HTTP Request: POST %s "HTTP/1.1 %s %s"',
-        client._provider.endpoint_uri,  # type: ignore[attr-defined]
-        resp.status_code,
-        resp.reason_phrase,
-    )
+
+    global _first_http_logged
+    if (
+        not _first_http_logged
+        or resp.status_code != 200
+        or resp.reason_phrase != "OK"
+    ):
+        http_logger.info(
+            'HTTP Request: POST %s "HTTP/1.1 %s %s"',
+            client._provider.endpoint_uri,  # type: ignore[attr-defined]
+            resp.status_code,
+            resp.reason_phrase,
+        )
+        _first_http_logged = True
+
     text = provider_core._after_request_unparsed(resp)
     return provider_core._parse_raw(text, parser)
 
@@ -170,9 +181,10 @@ def update_csv(path: Path, client: Client) -> None:
             df[col] = pd.NA
         df[col] = df[col].astype("object")
 
-    tokens: list[tuple[int, str]] = []
+    tokens: list[tuple[int, str, str]] = []
     for idx, row in df.iterrows():
         mint = str(row.get("mint_address", "")).strip()
+        name = str(row.get("name", "")).strip()
         if not mint:
             continue
         seen_val = row.get("first_seen_on")
@@ -182,7 +194,7 @@ def update_csv(path: Path, client: Client) -> None:
             seen = "" if pd.isna(seen_val) else str(seen_val)
         if seen:
             continue
-        tokens.append((idx, mint))
+        tokens.append((idx, mint, name))
 
     total = len(tokens)
     if total == 0:
@@ -195,8 +207,10 @@ def update_csv(path: Path, client: Client) -> None:
     for start in range(0, total, batch_size):
         end = min(start + batch_size, total)
         print(f"scanning {end - start}/{total} tokens this round.")
-        for idx, mint in tokens[start:end]:
-            logging.info("Scanning %s", mint)
+        for idx, mint, token_name in tokens[start:end]:
+            display_name = token_name if token_name else "Unknown"
+            print(f'Scanning "{display_name}, {mint}"')
+            logging.info("Scanning %s, %s", display_name, mint)
             info = analyze_mint(client, mint)
             df.loc[idx, "mint_authority_exist"] = info["mint_authority_exist"]
             df.loc[idx, "freeze_authority_exist"] = info["freeze_authority_exist"]
