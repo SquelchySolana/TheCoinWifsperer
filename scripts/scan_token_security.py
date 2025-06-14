@@ -129,6 +129,9 @@ def analyze_mint(client: Client, mint: str) -> Dict[str, Any]:
         result["metadata_mutable"] = 1 if metadata["is_mutable"] else 0
     else:
         result["metadata_mutable"] = "unknown"
+        result["security_status"] = "DANGER"
+        result["health_summary"] = "Danger - mutable metadata"
+        return result
 
     if (
         result["mint_authority_exist"]
